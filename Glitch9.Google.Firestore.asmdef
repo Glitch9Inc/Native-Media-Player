@@ -1,0 +1,19 @@
+{
+    "name": "Glitch9.Firestore",
+    "rootNamespace": "",
+    "references": [
+        "GUID:f51ebe6a0ceec4240a699833d6309b23",
+        "GUID:687e147e62e77cb4383d491f84da12c2",
+        "GUID:519ce8ff3a59daa4cbdf56be0b339a2e",
+        "GUID:fb974b03d7aea0e4982a1cb39aaacda9"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
