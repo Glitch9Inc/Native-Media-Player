@@ -51,7 +51,7 @@ namespace Glitch9.Apis.Google.Firestore
 
             if (docRef == null)
             {
-                Debug.LogWarning($"{typeof(T).Name}{Strings.DocumentReferenceNotFound}");
+                Debug.LogWarning($"{typeof(T).Name}{Strings.DOCUMENT_REFERENCE_NOT_FOUND}");
                 onSuccess?.Invoke(false);
                 return instance;
             }
@@ -71,7 +71,7 @@ namespace Glitch9.Apis.Google.Firestore
             }
             catch (Exception e)
             {
-                FirestoreManager.Logger.Error($"{typeof(T).Name}{Strings.FailedToLoadDocument}\n{e.Message}\n{e.StackTrace}");
+                FirestoreManager.Logger.Error($"{typeof(T).Name}{Strings.FAILED_TO_LOAD_DOCUMENT}\n{e.Message}\n{e.StackTrace}");
                 onSuccess?.Invoke(false);
             }
 
@@ -93,7 +93,7 @@ namespace Glitch9.Apis.Google.Firestore
 
             if (docRef == null)
             {
-                Debug.LogWarning($"{valueTypeName}{Strings.DocumentReferenceNotFound}");
+                Debug.LogWarning($"{valueTypeName}{Strings.DOCUMENT_REFERENCE_NOT_FOUND}");
                 onSuccess?.Invoke(false);
                 return instance;
             }
@@ -113,7 +113,7 @@ namespace Glitch9.Apis.Google.Firestore
             }
             catch (Exception e)
             {
-                FirestoreManager.Logger.Error($"{valueTypeName}{Strings.FailedToLoadDocument}\n{e.Message}\n{e.StackTrace}");
+                FirestoreManager.Logger.Error($"{valueTypeName}{Strings.FAILED_TO_LOAD_DOCUMENT}\n{e.Message}\n{e.StackTrace}");
                 onSuccess?.Invoke(false);
             }
 
@@ -135,7 +135,7 @@ namespace Glitch9.Apis.Google.Firestore
 
             if (query == null)
             {
-                Debug.LogWarning($"{valueTypeName}{Strings.CollectionReferenceNotFound}");
+                Debug.LogWarning($"{valueTypeName}{Strings.COLLECTION_REFERENCE_NOT_FOUND}");
                 onSuccess?.Invoke(false);
                 return instance;
             }
@@ -155,7 +155,7 @@ namespace Glitch9.Apis.Google.Firestore
             }
             catch (Exception e)
             {
-                FirestoreManager.Logger.Error($"{valueTypeName}{Strings.FailedToLoadDocument}\n{e.Message}\n{e.StackTrace}");
+                FirestoreManager.Logger.Error($"{valueTypeName}{Strings.FAILED_TO_LOAD_DOCUMENT}\n{e.Message}\n{e.StackTrace}");
                 onSuccess?.Invoke(false);
             }
 
@@ -188,7 +188,7 @@ namespace Glitch9.Apis.Google.Firestore
             }
             catch (Exception e)
             {
-                FirestoreManager.Logger.Error($"{colRef.Id}{Strings.FailedToFindField}{fieldName}\n{e.Message}\n{e.StackTrace}");
+                FirestoreManager.Logger.Error($"{colRef.Id}{Strings.FAILED_TO_FIND_FIELD}{fieldName}\n{e.Message}\n{e.StackTrace}");
             }
 
             return null;
@@ -220,7 +220,7 @@ namespace Glitch9.Apis.Google.Firestore
             }
             catch (Exception e)
             {
-                FirestoreManager.Logger.Error($"{docRef.Id}{Strings.FailedToFindField}{fieldName}\n{e.Message}\n{e.StackTrace}");
+                FirestoreManager.Logger.Error($"{docRef.Id}{Strings.FAILED_TO_FIND_FIELD}{fieldName}\n{e.Message}\n{e.StackTrace}");
             }
 
             return null;
@@ -231,10 +231,10 @@ namespace Glitch9.Apis.Google.Firestore
         /// </summary>
         private static class Strings
         {
-            internal const string DocumentReferenceNotFound = "'s DocumentReference not found.";
-            internal const string FailedToLoadDocument = " failed to load document.";
-            internal const string CollectionReferenceNotFound = "'s CollectionReference not found.";
-            internal const string FailedToFindField = " failed to find field ";
+            internal const string DOCUMENT_REFERENCE_NOT_FOUND = "'s DocumentReference not found.";
+            internal const string FAILED_TO_LOAD_DOCUMENT = " failed to load document.";
+            internal const string COLLECTION_REFERENCE_NOT_FOUND = "'s CollectionReference not found.";
+            internal const string FAILED_TO_FIND_FIELD = " failed to find field ";
         }
     }
 }
