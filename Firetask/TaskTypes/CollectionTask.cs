@@ -6,23 +6,27 @@ namespace Glitch9.Apis.Google.Firestore.Tasks
 {
     public sealed class CollectionTask : FiretaskBase
     {
-        public override bool Validate()
+        public override IResult ValidateTask()
         {
             if (Collection == null)
             {
-                GNLog.Error("This firestore task's collection reference is null");
-                OnComplete?.Invoke(Result.Fail("This firestore task's collection reference is null"));
-                return false;
+                string message = "This firestore task's collection reference is null";
+                FirestoreManager.Logger.Error(message);
+                IResult result = Result.Fail(message);
+                OnComplete?.Invoke(result);
+                return result;
             }
 
             if (TaskAction == FiretaskAction.AddDocuments && Data == null)
             {
-                GNLog.Error("This firestore task's data is null");
-                OnComplete?.Invoke(Result.Fail("This firestore task's data is null"));
-                return false;
+                string message = "Data to be stored in Firestore is null.";
+                FirestoreManager.Logger.Error(message);
+                IResult result = Result.Fail(message);
+                OnComplete?.Invoke(result);
+                return result;
             }
 
-            return true;
+            return Result.Success();
         }
 
         protected override async UniTask OnExecuteAsync()

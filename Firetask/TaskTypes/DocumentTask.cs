@@ -6,22 +6,27 @@ namespace Glitch9.Apis.Google.Firestore.Tasks
 {
     public sealed class DocumentTask : FiretaskBase
     {
-        public override bool Validate()
+        public override IResult ValidateTask()
         {
-            if (Document.LogIfNull())
+            if (Document == null)
             {
-                OnComplete?.Invoke(Result.Fail("Document is null."));
-                return false;
+                string message = "FirestoreDocument is null.";
+                FirestoreManager.Logger.Error(message);
+                IResult result = Result.Fail(message);
+                OnComplete?.Invoke(result);
+                return result;
             }
 
             if (Data == null && TaskAction != FiretaskAction.Delete)
             {
-                GNLog.Error("Firestore에 저장하려는 데이터가 null입니다.");
-                OnComplete?.Invoke(Result.Fail("Firestore에 저장하려는 데이터가 null입니다."));
-                return false;
+                string message = "Data to be stored in Firestore is null.";
+                FirestoreManager.Logger.Error(message);
+                IResult result = Result.Fail(message);
+                OnComplete?.Invoke(result);
+                return result;
             }
 
-            return true;
+            return Result.Success();
         }
 
         protected override async UniTask OnExecuteAsync()

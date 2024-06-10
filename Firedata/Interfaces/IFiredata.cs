@@ -1,21 +1,33 @@
-using System.Collections.Generic;
 using Firebase.Firestore;
+using System.Collections.Generic;
 
 namespace Glitch9.Apis.Google.Firestore
 {
+    /// <summary>
+    /// Defines the interface for objects that can interact with Firestore.
+    /// </summary>
     public interface IFiredata
     {
         /// <summary>
-        /// 이 Object가 Document일 경우 Document이름을 반환하고,
-        /// 이 Object가 Field일 경우 Field이름을 반환한다.
+        /// Returns the name of the object. If the object is a document, returns the document name.
+        /// If the object is a field, returns the field name.
         /// </summary>
-        string GetEntityName()
+        /// <returns>
+        /// A string representing the name of the Firestore data entity.
+        /// </returns>
+        string GetFiredataName()
         {
             if (this is IMapEntry mapEntry) return mapEntry.Key.ToSnakeCase();
             return GetType().Name.ToSnakeCase();
         }
 
-        FiredataType GetEntityType()
+        /// <summary>
+        /// Returns the type of the Firestore data entity.
+        /// </summary>
+        /// <returns>
+        /// A <see cref="FiredataType"/> representing the type of the Firestore data entity.
+        /// </returns>
+        FiredataType GetFiredataType()
         {
             if (this is IFirestoreDocument) return FiredataType.Document;
             if (this is IFirestoreDictionary map) return map.FiredataType;
@@ -23,21 +35,29 @@ namespace Glitch9.Apis.Google.Firestore
         }
 
         /// <summary>
-        /// 이 Object가 사용하는 DocumentReference를 반환한다.
+        /// Returns the <see cref="DocumentReference"/> used by this object.
         /// </summary>
-        /// <param name="referenceName">레퍼런스의 이름. 유저 데이터의 경우 유저의 Email이 Collection의 이름으로 사용된다.</param>
-        /// <returns></returns>
-        DocumentReference GetDocument(string referenceName = null);
+        /// <param name="args">Optional parameters, typically the user's email for user-specific data.</param>
+        /// <returns>
+        /// The <see cref="DocumentReference"/> associated with this object.
+        /// </returns>
+        DocumentReference GetDocument(params string[] args);
 
         /// <summary>
-        /// 이 Object에 Firestore에서 가져온 정보를 적용한다.
+        /// Applies data retrieved from Firestore to this object.
         /// </summary>
-        IFiredata SetMap(Dictionary<string, object> data);
+        /// <param name="firestoreData">A dictionary containing the Firestore data.</param>
+        /// <returns>
+        /// An <see cref="IFiredata"/> instance with the applied data.
+        /// </returns>
+        IFiredata ToLocalFormat(Dictionary<string, object> firestoreData);
 
         /// <summary>
-        /// 이 Object를 Firestore에 저장할 수 있는 형태로 변환한다.
+        /// Converts this object to a format that can be stored in Firestore.
         /// </summary>
+        /// <returns>
+        /// A dictionary representing this object in a Firestore-compatible format.
+        /// </returns>
         Dictionary<string, object> ToFirestoreFormat();
     }
 }
-

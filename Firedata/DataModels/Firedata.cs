@@ -7,55 +7,14 @@ using System.Reflection;
 
 namespace Glitch9.Apis.Google.Firestore
 {
+    /// <summary>
+    /// Represents a base class for Firestore data objects that provides functionality to interact with Firestore.
+    /// </summary>
+    /// <typeparam name="TSelf">The type of the derived class.</typeparam>
     public abstract class Firedata<TSelf> : IFiredata
         where TSelf : Firedata<TSelf>
     {
-        protected class FirestorePropertyInfo
-        {
-            public string Name { get; private set; }
-            public PropertyInfo Property { get; private set; }
-            public Type PropertyType => Property.PropertyType;
-
-            public FirestorePropertyInfo(string name, PropertyInfo field)
-            {
-                Name = name;
-                Property = field;
-            }
-
-            public object GetValue(object obj) => Property.GetValue(obj);
-            public void SetValue(object obj, object value)
-            {
-                try
-                {
-                    object convertedValue = CloudConverter.ToLocalFormat(PropertyType, Name, value);
-                    if (convertedValue == null) return;
-                    Property.SetValue(obj, convertedValue);
-                }
-                catch (Exception ex)
-                {
-                    GNLog.Error($"{Name}(Property)을 {PropertyType}으로 변환하는데 실패했습니다.");
-                    GNLog.Exception(ex);
-                }
-            }
-        }
-
-        public virtual DocumentReference GetDocument(string arg = null) => DocumentFactory?.Invoke(new string[] { arg });
-        protected static readonly Dictionary<string/* 타입이름 */, Dictionary<string/* 프로퍼티이름 */, FirestorePropertyInfo>> PropertyCache = new();
-        protected static readonly Dictionary<string/* 서버용으로 SnakeCase로 바뀐 후 프로퍼티이름 */, string/* 바뀌기 전 프로퍼티이름 */> PropertyMap = new();
-        public static string GetOriginalPropertyName(string snakeCasePropertyName)
-        {
-            if (PropertyMap.TryGetValue(snakeCasePropertyName, out string originalPropertyName))
-            {
-                return originalPropertyName;
-            }
-            else
-            {
-                return snakeCasePropertyName.ToPascalCase();
-            }
-        }
-
-        public DocumentReference Document { get; set; }
-        public Func<string[], DocumentReference> DocumentFactory { get; set; }
+        protected static readonly Dictionary<string, Dictionary<string, FirestorePropertyInfo>> PropertyCache = new();
 
         static Firedata()
         {
@@ -63,19 +22,17 @@ namespace Glitch9.Apis.Google.Firestore
             string thisClassName = type.Name;
 
             if (type.IsAbstract || type.IsInterface) return;
-            
-            // ReSharper disable once PossibleNullReferenceException
+
             if (PropertyCache.ContainsKey(thisClassName)) return;
-            
+
             PropertyCache.Add(thisClassName, new Dictionary<string, FirestorePropertyInfo>());
 
-            while (type != null && type != typeof(object)) // Use typeof(object) to cover all base classes
+            while (type != null && type != typeof(object))
             {
                 foreach (PropertyInfo property in PropertyInfoCache.Get(type))
                 {
-                    if (!property.CanWrite) continue; // Check if the property has setter
+                    if (!property.CanWrite) continue;
 
-                    // Check if the property has the CloudDataAttribute
                     CloudDataAttribute attribute = property.GetCustomAttribute<CloudDataAttribute>();
                     if (attribute == null) continue;
 
@@ -85,8 +42,7 @@ namespace Glitch9.Apis.Google.Firestore
                         propertyName = property.Name.ToSnakeCase();
                     }
 
-                    GNLog.Info($"{type.Name}의 {property.Name}이 {propertyName}로 변환됩니다.");
-                    PropertyMap.TryAdd(propertyName, property.Name); // Cache the property names (use TryAdd to handle potential duplicates)
+                    FirestoreManager.Logger.Info($"{type.Name}{Strings.PropertyConverted}{property.Name}{Strings.To}{propertyName}");
 
                     if (!PropertyCache[thisClassName].ContainsKey(propertyName))
                     {
@@ -98,9 +54,58 @@ namespace Glitch9.Apis.Google.Firestore
             }
         }
 
+        /// <summary>
+        /// Represents the metadata of a Firestore property.
+        /// </summary>
+        protected class FirestorePropertyInfo
+        {
+            public string Name { get; }
+            public PropertyInfo Property { get; }
+            public Type PropertyType => Property.PropertyType;
+
+            public FirestorePropertyInfo(string name, PropertyInfo property)
+            {
+                Name = name;
+                Property = property;
+            }
+
+            public object GetValue(object obj) => Property.GetValue(obj);
+
+            public void SetValue(object obj, object value)
+            {
+                try
+                {
+                    object convertedValue = CloudConverter.ToLocalFormat(PropertyType, Name, value);
+                    if (convertedValue == null) return;
+                    Property.SetValue(obj, convertedValue);
+                }
+                catch (Exception ex)
+                {
+                    FirestoreManager.Logger.Error($"{Name}{Strings.FailedToConvert}{PropertyType}.");
+                    GNLog.Exception(ex);
+                }
+            }
+        }
+
+        public DocumentReference Document { get; set; }
+        private readonly Func<string[], DocumentReference> _documentFactory;
+
+        /// <summary>
+        /// Gets the Firestore document reference.
+        /// </summary>
+        /// <param name="args">Optional arguments to construct the document reference.</param>
+        /// <returns>The Firestore document reference.</returns>
+        public virtual DocumentReference GetDocument(params string[] args)
+        {
+            if (Document != null) return Document;
+            if (_documentFactory == null) return null;
+            Document = _documentFactory(args);
+            return Document;
+        }
+
         protected Firedata()
         {
-            DocumentFactory = FirestoreReference.GetDocumentFactory<TSelf>();
+            _documentFactory = FirestoreReference.GetDocumentFactory<TSelf>();
         }
 
         protected Firedata(string documentName)
@@ -114,6 +119,10 @@ namespace Glitch9.Apis.Google.Firestore
             Document = document;
         }
 
+        /// <summary>
+        /// Converts the current object to a format that can be stored in Firestore.
+        /// </summary>
+        /// <returns>A dictionary representing the Firestore format of the current object.</returns>
         public Dictionary<string, object> ToFirestoreFormat()
         {
             Dictionary<string, FirestorePropertyInfo> properties = GetCachedProperties();
@@ -128,58 +137,64 @@ namespace Glitch9.Apis.Google.Firestore
                     object convertedValue = CloudConverter.ToCloudFormat(property.Value.PropertyType, property.Value.GetValue(this));
                     if (convertedValue == null) continue;
 
-                    // 맵에 추가된 value의 타입이 뭔지 로그를 남긴다.
-                    // GNLog.Warning($"{property.Key} is converted to {convertedValue.GetType()}");
                     mapField.Add(property.Key, convertedValue);
                 }
                 return mapField;
             }
             catch (Exception ex)
             {
-                GNLog.Error("Failed to retrieve fields using reflection. See error log for details.");
+                FirestoreManager.Logger.Error(Strings.ReflectionFailed);
                 GNLog.Exception(ex);
                 return null;
             }
         }
 
-        public IFiredata SetMap(Dictionary<string, object> firestoreMap)
+        /// <summary>
+        /// Applies Firestore data to the current object.
+        /// </summary>
+        /// <param name="firestoreData">A dictionary containing the Firestore data.</param>
+        /// <returns>The current object with applied Firestore data.</returns>
+        public IFiredata ToLocalFormat(Dictionary<string, object> firestoreData)
         {
-            if (firestoreMap == null || firestoreMap.Count == 0) return null;
+            if (firestoreData.IsNullOrEmpty()) return null;
 
             Dictionary<string, FirestorePropertyInfo> properties = GetCachedProperties();
             if (properties == null) return null;
 
-            foreach (KeyValuePair<string, object> pair in firestoreMap)
+            foreach (KeyValuePair<string, object> pair in firestoreData)
             {
                 if (properties.TryGetValue(pair.Key, out FirestorePropertyInfo property))
                 {
-                    // Check if the value is not null or if the field type allows null
                     if (pair.Value != null || pair.Value != default || Nullable.GetUnderlyingType(property.PropertyType) != null)
                     {
                         property.SetValue(this, pair.Value);
                     }
                     else
                     {
-                        GNLog.Error($"Null value found for non-nullable field: {pair.Key}");
+                        FirestoreManager.Logger.Error($"{Strings.NullValueForNonNullableField}{pair.Key}");
                     }
                 }
             }
             return this;
         }
 
+        /// <summary>
+        /// Gets the cached properties of the current type.
+        /// </summary>
+        /// <returns>A dictionary containing the cached properties.</returns>
         protected Dictionary<string, FirestorePropertyInfo> GetCachedProperties()
         {
             string typeName = typeof(TSelf).Name;
 
             if (PropertyCache.IsNullOrEmpty())
             {
-                GNLog.Error("리플렉션 캐시가 없습니다."); // "Reflection cache is empty.
+                FirestoreManager.Logger.Error(Strings.ReflectionCacheEmpty);
                 return null;
             }
 
             if (!PropertyCache.ContainsKey(typeName))
             {
-                GNLog.Error($"{typeName}의 필드 캐시가 없습니다.");
+                FirestoreManager.Logger.Error($"{Strings.NoFieldCache}{typeName}");
                 return null;
             }
 
@@ -187,11 +202,26 @@ namespace Glitch9.Apis.Google.Firestore
 
             if (fields.IsNullOrEmpty())
             {
-                GNLog.Error($"{typeName}의 필드의 내용이 없습니다.");
+                FirestoreManager.Logger.Error($"{Strings.NoFieldContents}{typeName}");
                 return null;
             }
 
             return fields;
+        }
+
+        /// <summary>
+        /// Contains constant string values for logging and messages.
+        /// </summary>
+        private static class Strings
+        {
+            internal const string PropertyConverted = "'s property has been converted: ";
+            internal const string To = " -> ";
+            internal const string FailedToConvert = " failed to convert the property.";
+            internal const string ReflectionFailed = "Failed to retrieve fields using reflection. See error log for details.";
+            internal const string NullValueForNonNullableField = "Null value found for non-nullable field: ";
+            internal const string ReflectionCacheEmpty = "Reflection cache is empty.";
+            internal const string NoFieldCache = "No field cache for: ";
+            internal const string NoFieldContents = "No field contents for: ";
         }
     }
 }

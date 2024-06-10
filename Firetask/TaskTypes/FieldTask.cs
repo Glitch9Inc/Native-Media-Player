@@ -64,34 +64,43 @@ namespace Glitch9.Apis.Google.Firestore.Tasks
         {
             if (iField == null)
             {
-                GNLog.Error("This firestore task's data is null");
+                FirestoreManager.Logger.Error("This firestore task's data is null");
                 return this;
             }
 
-            return SetData(iField.GetEntityName(), iField.ToFirestoreFormat());
+            return SetData(iField.GetFiredataName(), iField.ToFirestoreFormat());
         }
 
-        public override bool Validate()
+        public override IResult ValidateTask()
         {
             if (Document == null)
             {
-                OnComplete?.Invoke(Result.Fail("This firestore task's document reference is null"));
-                return false;
+                string message = "This firestore task's document reference is null";
+                FirestoreManager.Logger.Error(message);
+                IResult result = Result.Fail(message);
+                OnComplete?.Invoke(result);
+                return result;
             }
 
             if (string.IsNullOrWhiteSpace(FieldName))
             {
-                OnComplete?.Invoke(Result.Fail("This firestore task's fieldname is null"));
-                return false;
+                string message = "This firestore task's field name is null or empty";
+                FirestoreManager.Logger.Error(message);
+                IResult result = Result.Fail(message);
+                OnComplete?.Invoke(result);
+                return result;
             }
 
             if (TaskAction != FiretaskAction.Delete && FieldValue == null)
             {
-                OnComplete?.Invoke(Result.Fail("This firestore task's data is null"));
-                return false;
+                string message = "This firestore task's field value is null";
+                FirestoreManager.Logger.Error(message);
+                IResult result = Result.Fail(message);
+                OnComplete?.Invoke(result);
+                return result;
             }
 
-            return true;
+            return Result.Success();
         }
 
 

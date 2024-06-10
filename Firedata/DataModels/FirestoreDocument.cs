@@ -2,53 +2,72 @@ using Cysharp.Threading.Tasks;
 using Firebase.Firestore;
 using System;
 using System.Threading;
-// ReSharper disable StaticMemberInGenericType
+using UnityEngine.Pool;
 
 namespace Glitch9.Apis.Google.Firestore
 {
+    /// <summary>
+    /// Abstract base class for Firestore documents that provides common functionality and interaction with Firestore.
+    /// </summary>
+    /// <typeparam name="TSelf">The type of the derived class.</typeparam>
     public abstract class FirestoreDocument<TSelf> : Firedata<TSelf>, IFirestoreDocument, IMapEntry
         where TSelf : FirestoreDocument<TSelf>, new()
     {
+        /// <summary>
+        /// Gets the key associated with this document. The key can represent the document name or collection name.
+        /// </summary>
         public abstract string Key { get; }
-        private static readonly SemaphoreSlim _semaphore = new(1, 1);
-        private static bool _isInitialized = false;
 
         private static TSelf _playerInstance;
-        public static TSelf Player              // 현재 사용자의 인스턴스
+
+        /// <summary>
+        /// Gets the current user's instance of the document.
+        /// </summary>
+        public static TSelf Player
         {
             get
             {
-                if (!_isInitialized)
+                if (_playerInstance == null)
                 {
-                    GNLog.Warning($"{typeof(TSelf).Name}가 아직 초기화되지 않았습니다.");
+                    FirestoreManager.LogNotInitializedYet(typeof(TSelf));
                     return null;
                 }
-                return _playerInstance ??= ReflectionUtils.CreateInstance<TSelf>();
+                return _playerInstance;
             }
             private set => _playerInstance = value;
         }
 
-        public bool IsPlayerInstance() => Player == this; // Property로 사용하면 Reflection에서 인식함으로 Method로 사용
+        /// <summary>
+        /// Determines whether this instance is the current user's instance.
+        /// </summary>
+        /// <returns>True if this instance is the current user's instance; otherwise, false.</returns>
+        public bool IsPlayerInstance() => Player == this;
 
         /// <summary>
-        /// 주로 에디터에서 Application.isPlaying이 false일때 인스턴스를 불러오기 위해 사용
+        /// Gets the current user's instance asynchronously, typically used in the editor when Application.isPlaying is false.
         /// </summary>
+        /// <returns>A task that represents the asynchronous operation, containing the current user's instance.</returns>
         public static async UniTask<TSelf> GetMyInstanceAsync()
         {
-            if (!_isInitialized)
+            if (_playerInstance == null)
             {
                 await InitializeAsync();
             }
             return Player;
         }
 
+        /// <summary>
+        /// Initializes the current user's instance asynchronously.
+        /// </summary>
+        /// <param name="onSuccess">An optional callback action that is invoked with a boolean indicating success or failure.</param>
         public static async UniTask InitializeAsync(Action<bool> onSuccess = null)
         {
+            using PooledObject<SemaphoreSlim> pooledSemaphore = SemaphoreSlimPool.Get(out SemaphoreSlim semaphore);
             try
             {
-                await _semaphore.WaitAsync();
+                await semaphore.WaitAsync();
 
-                if (!_isInitialized)
+                if (_playerInstance == null)
                 {
                     _playerInstance = await FiredataLoader.LoadDocumentAsync<TSelf>();
                 }
@@ -63,36 +82,33 @@ namespace Glitch9.Apis.Google.Firestore
             finally
             {
                 _playerInstance ??= ReflectionUtils.CreateInstance<TSelf>();
-                _isInitialized = true;
-                _semaphore.Release();
+                semaphore.Release();
             }
         }
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="FirestoreDocument{TSelf}"/> class.
+        /// </summary>
         protected FirestoreDocument() : base() { }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="FirestoreDocument{TSelf}"/> class with the specified document name.
+        /// </summary>
+        /// <param name="documentName">The name of the document.</param>
         protected FirestoreDocument(string documentName) : base(documentName) { }
 
-        public IFiredata SetSnapshot(DocumentSnapshot snapshot)
+        /// <summary>
+        /// Applies data from a Firestore document snapshot to this document.
+        /// </summary>
+        /// <param name="snapshot">The document snapshot containing the Firestore data.</param>
+        /// <returns>An <see cref="IFiredata"/> instance with the applied data.</returns>
+        public IFiredata ToLocalFormat(DocumentSnapshot snapshot)
         {
             if (snapshot == null) return null;
             System.Collections.Generic.Dictionary<string, object> map = snapshot.ToDictionary();
             if (map == null) return null;
-            SetMap(map);
+            ToLocalFormat(map);
             return this;
-        }
-
-        public override DocumentReference GetDocument(string email = null)
-        {
-            IMapEntry mapEntry = this;
-            string documentName = mapEntry.Key;
-            DocumentReference document = FirestoreReference.GetDocument(GetType(), email, documentName);
-            if (document == null)
-            {
-                if (documentName == null) GNLog.Error($"{GetType().Name}의 DocumentReference를 가져오는데 실패했습니다.");
-                else GNLog.Error($"{GetType().Name}의 DocumentReference를 가져오는데 실패했습니다. DocumentName: {documentName}");
-                return null;
-            }
-
-            return document;
         }
     }
 }

@@ -1,9 +1,9 @@
 using Cysharp.Threading.Tasks;
 using Firebase.Firestore;
-using System;
-using System.Collections.Generic;
 using Glitch9.Apis.Google.Firebase;
 using Glitch9.IO.Network;
+using System;
+using System.Collections.Generic;
 
 
 namespace Glitch9.Apis.Google.Firestore.Tasks
@@ -16,13 +16,15 @@ namespace Glitch9.Apis.Google.Firestore.Tasks
         public FiretaskAction TaskAction { get; set; } = FiretaskAction.MergeAll;
         public Action<IResult> OnComplete { get; set; }
 
-        public abstract bool Validate();
+        public abstract IResult ValidateTask();
         protected abstract UniTask OnExecuteAsync();
         public async void Execute(Action<IResult> onComplete = null) => await ExecuteAsync(onComplete);
-        public async UniTask<bool> ExecuteAsync(Action<IResult> onComplete = null)
+        public async UniTask<IResult> ExecuteAsync(Action<IResult> onComplete = null)
         {
-            if (!FirebaseManager.CheckFirebaseAuth()) return false;
-            if (!Validate()) return false;
+            if (!FirebaseManager.CheckFirebaseAuth()) return Result.Fail("Invalid Firebase Auth");
+
+            IResult validation = ValidateTask();
+            if (validation.IsFailure) return validation;
 
             if (onComplete != null) OnComplete += onComplete;
             bool success = false;
@@ -76,7 +78,7 @@ namespace Glitch9.Apis.Google.Firestore.Tasks
                 }
             }
 
-            return success;
+            return result;
         }
 
 
@@ -147,7 +149,7 @@ namespace Glitch9.Apis.Google.Firestore.Tasks
             }
 
             OnComplete = onComplete;
-            GNLog.Info("Batch task added: " + batchId);
+            FirestoreManager.Logger.Info("Batch task added: " + batchId);
             return batchId;
         }
     }

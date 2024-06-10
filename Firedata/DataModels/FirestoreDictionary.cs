@@ -1,29 +1,32 @@
 using Cysharp.Threading.Tasks;
 using Firebase.Firestore;
+using Glitch9.IO.Network;
 using System;
 using System.Collections.Generic;
 using System.Threading;
-using Glitch9.IO.Network;
-
-// ReSharper disable StaticMemberInGenericType
+using UnityEngine.Pool;
 
 namespace Glitch9.Apis.Google.Firestore
 {
     /// <summary>
-    /// 1개의 FirestoreDocument를 Dictionary로 관리하는 클래스
-    /// 필드 1개의 Name은 Key로, Value는 Value로 사용된다.
+    /// Manages a single Firestore document as a dictionary.
+    /// The name of one field is used as the key, and the value is used as the value.
     /// </summary>
     public sealed class FirestoreDictionary<TValue> : Dictionary<string, TValue>, IFirestoreDictionary
-    //where TValue : class, IFirestoreEntity, new()
     {
-        private static readonly SemaphoreSlim _semaphore = new(1, 1);
-
-        // Unified entry point for initialization
+        /// <summary>
+        /// Unified entry point for initialization.
+        /// </summary>
+        /// <typeparam name="TRef">The type of the reference, which can be either a DocumentReference or a CollectionReference.</typeparam>
+        /// <param name="reference">The reference to the Firestore document or collection.</param>
+        /// <param name="onSuccess">An optional callback action that is invoked with a boolean indicating success or failure.</param>
+        /// <returns>A task that represents the asynchronous operation, containing the initialized <see cref="FirestoreDictionary{TValue}"/>.</returns>
         public static async UniTask<FirestoreDictionary<TValue>> CreateAsync<TRef>(TRef reference, Action<bool> onSuccess = null) where TRef : class
         {
+            using PooledObject<SemaphoreSlim> pooledSemaphore = SemaphoreSlimPool.Get(out SemaphoreSlim semaphore);
             try
             {
-                await _semaphore.WaitAsync();
+                await semaphore.WaitAsync();
                 FirestoreDictionary<TValue> dict = await RetrieveFirestoreDataAsync(reference, onSuccess) ?? new FirestoreDictionary<TValue>();
                 onSuccess?.Invoke(true);
                 return dict;
@@ -36,7 +39,7 @@ namespace Glitch9.Apis.Google.Firestore
             }
             finally
             {
-                _semaphore.Release();
+                semaphore.Release();
             }
         }
 
@@ -61,19 +64,19 @@ namespace Glitch9.Apis.Google.Firestore
             }
             else
             {
-                GNLog.Error($"GNFirestoreDictionary({typeof(TValue).Name})의 reference가 잘못되었거나 null입니다.");
+                FirestoreManager.Logger.Error($"{Strings.INVALID_REFERENCE} ({typeof(TValue).Name}).");
             }
 
             int count = dict?.Count ?? 0;
-            LogInstanceDetails(count, refName);
+            LogCount(refName, count);
 
             return dict;
         }
 
-        private static void LogInstanceDetails(int count, string refName)
+        private static void LogCount(string refName, int count)
         {
             string colorString = count == 0 ? "red" : "blue";
-            GNLog.Info($"<color=blue>{refName}</color>에서 <color={colorString}>{count}개</color>의 {typeof(TValue).Name}를 로드했습니다");
+            FirestoreManager.Logger.Info($"{Strings.LOADED_FROM_REFERENCE} <color=blue>{refName}</color> {Strings.LOADED_ITEMS} <color={colorString}>{count}</color> <color=blue>{typeof(TValue).Name}</color>.");
         }
 
         public FirestoreDictionary() { }
@@ -82,9 +85,9 @@ namespace Glitch9.Apis.Google.Firestore
         private FiredataType _firedataType;
         private DocumentReference _docRef;
         private CollectionReference _colRef;
-        public DocumentReference GetDocument(string email = null) => _docRef;
-        public CollectionReference GetCollection(string email = null) => _colRef;
 
+        public DocumentReference GetDocument(params string[] args) => _docRef;
+        public CollectionReference GetCollection(params string[] args) => _colRef;
 
         public TValue GetOrCreate(string key)
         {
@@ -104,17 +107,17 @@ namespace Glitch9.Apis.Google.Firestore
                 {
                     try
                     {
-                        string objName = fObj.GetEntityName();
+                        string objName = fObj.GetFiredataName();
                         if (string.IsNullOrWhiteSpace(objName))
                         {
-                            GNLog.Error($"{fObj.GetType().Name}의 이름이 없습니다.");
+                            FirestoreManager.Logger.Error($"{fObj.GetType().Name} {Strings.MISSING_NAME}.");
                             continue;
                         }
 
                         Dictionary<string, object> obj = fObj.ToFirestoreFormat();
                         if (obj == null)
                         {
-                            GNLog.Warning($"{fObj.GetType().Name}를 FirestoreObject로 변환할 수 없습니다.");
+                            FirestoreManager.Logger.Warning($"{fObj.GetType().Name} {Strings.CONVERSION_TO_FIRESTORE_OBJECT_FAILED}.");
                             continue;
                         }
 
@@ -122,7 +125,7 @@ namespace Glitch9.Apis.Google.Firestore
                     }
                     catch (Exception e)
                     {
-                        GNLog.Error($"{fObj.GetType().Name}를 FirestoreObject로 변환하는데 실패했습니다.\n{e.Message}\n{e.StackTrace}");
+                        FirestoreManager.Logger.Error($"{fObj.GetType().Name} {Strings.CONVERSION_TO_FIRESTORE_OBJECT_FAILED}\n{e.Message}\n{e.StackTrace}");
                     }
                 }
             }
@@ -130,16 +133,14 @@ namespace Glitch9.Apis.Google.Firestore
             return dictionary;
         }
 
-
-
         /// <summary>
-        /// 이 Dictionary의 Key가 Document이름, Value가 Field일 경우 사용한다.
-        /// FirestoreDocument안에 Field의 포멧이 전부 동일해야한다. (아니면 에러가 난다)
+        /// Applies data to the dictionary when the key is the document name and the value is the field.
+        /// All fields within the Firestore document must have the same format (otherwise, errors will occur).
         /// </summary>
-        public IFiredata SetMap(Dictionary<string, object> data)
+        public IFiredata ToLocalFormat(Dictionary<string, object> data)
         {
             string snapshotId = _docRef?.Id;
-            LogDictionaryDetails(snapshotId, data.Count);
+            LogCount(snapshotId, data.Count);
             Type valueType = typeof(TValue);
 
             foreach (KeyValuePair<string, object> item in data)
@@ -147,8 +148,8 @@ namespace Glitch9.Apis.Google.Firestore
                 if (item.Value == null) continue;
 
                 string fieldName = item.Key;
-                if (fieldName == "edited_at") continue;
-                //string pascalCasedFieldName = fieldName.ToPascalCase();
+                if (fieldName == Strings.EDITED_AT_FIELD) continue;
+
                 object fieldValue = item.Value;
 
                 try
@@ -157,7 +158,7 @@ namespace Glitch9.Apis.Google.Firestore
 
                     if (newValue is not TValue value)
                     {
-                        GNLog.Warning($"{fieldName}({fieldValue.GetType().Name})를 {typeof(TValue).Name} 타입으로 변환할 수 없습니다.");
+                        FirestoreManager.Logger.Warning($"{fieldName}({fieldValue.GetType().Name}) {Strings.CONVERSION_TO_TYPE_FAILED} {typeof(TValue).Name}.");
                         continue;
                     }
 
@@ -165,39 +166,35 @@ namespace Glitch9.Apis.Google.Firestore
                 }
                 catch (Exception e)
                 {
-                    GNLog.Error($"{fieldName}({fieldValue.GetType().Name})를 {typeof(TValue).Name} 타입으로 변환하는데 실패했습니다.\n{e.Message}\n{e.StackTrace}");
+                    FirestoreManager.Logger.Error($"{fieldName}({fieldValue.GetType().Name}) {Strings.CONVERSION_TO_TYPE_FAILED} {typeof(TValue).Name}.\n{e.Message}\n{e.StackTrace}");
                 }
             }
 
             return this;
         }
 
-
         /// <summary>
-        /// 이 Dictionary의 Key가 Collection이름, Value가 Document일 경우 사용한다.
+        /// Applies data to the dictionary when the key is the collection name and the value is the document.
         /// </summary>
         public IFiredata SetSnapshots(QuerySnapshot snapshots)
         {
-            string snapshotId = $"{typeof(TValue).Name}의 쿼리";
-            LogDictionaryDetails(snapshotId, snapshots.Count);
+            string snapshotId = $"{typeof(TValue).Name} {Strings.QUERY}";
+            LogCount(snapshotId, snapshots.Count);
 
             foreach (DocumentSnapshot snapshot in snapshots)
             {
                 string documentName = snapshot.Id;
-
-                // 타입에 맞는 인스턴스를 생성하는데, id로 documentName을 사용한다.
-                // 예를들어 Character콜렉션 안에 Tuto라는 Document가 있으면, "Tuto"를 인자로 넘긴다.
                 TValue data = ReflectionUtils.CreateInstance<TValue>(documentName);
 
                 if (data == null) continue;
 
                 if (data is IFirestoreDocument firestoreDocument)
                 {
-                    firestoreDocument.SetSnapshot(snapshot);
+                    firestoreDocument.ToLocalFormat(snapshot);
                 }
                 else
                 {
-                    GNLog.Error($"{typeof(TValue).Name}는 FirestoreDocument가 아닙니다.");
+                    FirestoreManager.Logger.Error($"{typeof(TValue).Name} {Strings.NOT_A_FIRESTORE_DOCUMENT}.");
                     continue;
                 }
 
@@ -207,16 +204,21 @@ namespace Glitch9.Apis.Google.Firestore
             return this;
         }
 
-        private void LogDictionaryDetails(string snapshotId, int count)
+
+        /// <summary>
+        /// Contains constant string values for logging and messages.
+        /// </summary>
+        private static class Strings
         {
-            if (count == 0)
-            {
-                GNLog.Info($"<color=blue>{snapshotId}</color>에 <color=blue>{typeof(TValue).Name}</color>가 없습니다.");
-            }
-            else
-            {
-                GNLog.Info($"<color=blue>{snapshotId}</color>에서 <color=blue>{count}개</color>의 <color=blue>{typeof(TValue).Name}</color>를 찾았습니다.");
-            }
+            internal const string EDITED_AT_FIELD = "edited_at";
+            internal const string INVALID_REFERENCE = "The reference is invalid or null";
+            internal const string LOADED_FROM_REFERENCE = "Loaded items from reference";
+            internal const string LOADED_ITEMS = "items of type";
+            internal const string MISSING_NAME = "is missing a name";
+            internal const string CONVERSION_TO_FIRESTORE_OBJECT_FAILED = "could not be converted to Firestore object";
+            internal const string CONVERSION_TO_TYPE_FAILED = "could not be converted to type";
+            internal const string QUERY = "query";
+            internal const string NOT_A_FIRESTORE_DOCUMENT = "is not a Firestore document";
         }
     }
 }
